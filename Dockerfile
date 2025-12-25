@@ -13,11 +13,13 @@ RUN go mod download
 COPY . .
 
 # Build args for cross-compilation
-ARG VERSION=dev
 ARG TARGETOS
 ARG TARGETARCH
 
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags "-X main.version=${VERSION}" -o dovetail ./cmd/dovetail
+# Copy root VERSION to embedded location for release builds
+RUN cp VERSION internal/version/VERSION
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o dovetail ./cmd/dovetail
 
 FROM alpine:3.20
 

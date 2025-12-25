@@ -23,7 +23,11 @@ bump-and-commit-version bump_type:
 
 build:
     mkdir -p dist
-    go build -ldflags "-X main.version={{version}}" -o dist/dovetail ./cmd/dovetail
+    go build -o dist/dovetail ./cmd/dovetail
+
+# Copy root VERSION to embedded location for release builds
+copy-version:
+    cp VERSION internal/version/VERSION
 
 run: build
     ./dist/dovetail

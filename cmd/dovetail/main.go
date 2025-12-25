@@ -21,13 +21,17 @@ func main() {
 	}))
 
 	ver := version.Get()
+	displayVer := ver
+	if ver != "dev" {
+		displayVer = "v" + ver
+	}
 
 	fmt.Fprintf(os.Stderr, `
     ╭──────────────────────────────────────╮
-    │           dovetail v%-17s│
+    │           dovetail %-18s│
     │   Automatic Tailscale for Docker     │
     ╰──────────────────────────────────────╯
-`, ver)
+`, displayVer)
 
 	logger.Info("starting",
 		"version", ver,
