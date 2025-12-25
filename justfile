@@ -3,29 +3,23 @@ set shell := ["bash", "-cu"]
 version := `git describe --tags --always --dirty 2>/dev/null || echo "dev"`
 image := "dovetail"
 
-# Build the dovetail binary
 build:
     mkdir -p dist
     go build -ldflags "-X main.version={{version}}" -o dist/dovetail ./cmd/dovetail
 
-# Build and run
 run: build
     ./dist/dovetail
 
-# Run tests
 test:
     go test -v ./...
 
-# Run linter
 lint:
     golangci-lint run
 
-# Clean build artifacts
 clean:
     rm -rf dist
     go clean
 
-# Build multi-arch Docker image (amd64 + arm64)
 docker-build:
     docker buildx build --platform linux/amd64,linux/arm64 \
         --build-arg VERSION={{version}} \
@@ -33,7 +27,6 @@ docker-build:
         -t {{image}}:latest \
         .
 
-# Build and push multi-arch Docker image
 docker-push registry:
     docker buildx build --platform linux/amd64,linux/arm64 \
         --build-arg VERSION={{version}} \
@@ -42,7 +35,6 @@ docker-push registry:
         --push \
         .
 
-# Run Docker container locally
 docker-run:
     docker run --rm -it \
         -v /var/run/docker.sock:/var/run/docker.sock:ro \
