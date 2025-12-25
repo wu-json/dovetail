@@ -2,24 +2,39 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"github.com/jasonwu/dovetail/internal/config"
 	"github.com/jasonwu/dovetail/internal/docker"
 	"github.com/jasonwu/dovetail/internal/service"
+	"github.com/jasonwu/dovetail/internal/version"
 )
 
-var version = "dev"
-
 func main() {
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
-	logger.Info("starting dovetail", "version", version)
+	ver := version.Get()
+
+	fmt.Fprintf(os.Stderr, `
+    ╭──────────────────────────────────────╮
+    │           dovetail v%-17s│
+    │   Automatic Tailscale for Docker     │
+    ╰──────────────────────────────────────╯
+`, ver)
+
+	logger.Info("starting",
+		"version", ver,
+		"go", runtime.Version(),
+		"os", runtime.GOOS,
+		"arch", runtime.GOARCH,
+	)
 
 	cfg, err := config.Load()
 	if err != nil {
