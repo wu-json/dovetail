@@ -63,7 +63,6 @@ Containers opt-in to exposure by setting a `dovetail.name` label. The presence o
 |-------|----------|-------------|---------|
 | `dovetail.name` | Yes | Service name on the tailnet (presence enables exposure) | `myapp` |
 | `dovetail.port` | Yes | Container port to expose | `8080` |
-| `dovetail.network` | No | Docker network to use for routing (for multi-network containers) | `backend` |
 
 ### Example Docker Compose
 
@@ -303,9 +302,8 @@ volumes:
 
 When a container is connected to multiple Docker networks, Dovetail selects the target IP using the following priority:
 
-1. Network specified via `dovetail.network` label (if provided)
-2. Bridge network (if connected)
-3. First available network (alphabetically)
+1. Bridge network (if connected)
+2. First available network (alphabetically)
 
 ## Future Considerations
 

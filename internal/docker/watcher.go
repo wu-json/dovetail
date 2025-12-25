@@ -15,9 +15,8 @@ import (
 )
 
 const (
-	LabelName    = "dovetail.name"
-	LabelPort    = "dovetail.port"
-	LabelNetwork = "dovetail.network"
+	LabelName = "dovetail.name"
+	LabelPort = "dovetail.port"
 )
 
 type EventType int
@@ -188,11 +187,8 @@ func (w *Watcher) inspectContainer(ctx context.Context, id string) (*ServiceConf
 		return nil, fmt.Errorf("invalid port value %q: %w", portStr, err)
 	}
 
-	// Get preferred network from label
-	preferredNetwork := info.Config.Labels[LabelNetwork]
-
 	// Get container IP
-	ip, network, err := w.getContainerIP(info.NetworkSettings.Networks, preferredNetwork)
+	ip, network, err := w.getContainerIP(info.NetworkSettings.Networks)
 	if err != nil {
 		return nil, err
 	}
@@ -213,25 +209,17 @@ func (w *Watcher) inspectContainer(ctx context.Context, id string) (*ServiceConf
 	}, nil
 }
 
-func (w *Watcher) getContainerIP(networks map[string]*network.EndpointSettings, preferred string) (string, string, error) {
+func (w *Watcher) getContainerIP(networks map[string]*network.EndpointSettings) (string, string, error) {
 	if len(networks) == 0 {
 		return "", "", fmt.Errorf("container has no networks")
 	}
 
-	// Priority 1: Use preferred network if specified and available
-	if preferred != "" {
-		if net, ok := networks[preferred]; ok && net.IPAddress != "" {
-			return net.IPAddress, preferred, nil
-		}
-		w.logger.Warn("preferred network not found or has no IP", "network", preferred)
-	}
-
-	// Priority 2: Use bridge network
+	// Priority 1: Use bridge network
 	if net, ok := networks["bridge"]; ok && net.IPAddress != "" {
 		return net.IPAddress, "bridge", nil
 	}
 
-	// Priority 3: First available network (alphabetically for consistency)
+	// Priority 2: First available network (alphabetically for consistency)
 	var names []string
 	for name := range networks {
 		names = append(names, name)

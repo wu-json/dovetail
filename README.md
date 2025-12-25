@@ -59,5 +59,4 @@ Your service will be available at `https://webapp.<tailnet-name>.ts.net`.
 |-------|----------|-------------|
 | `dovetail.name` | Yes | Hostname for the service on your tailnet |
 | `dovetail.port` | Yes | Container port to proxy |
-| `dovetail.network` | No | Preferred Docker network for routing |
 
