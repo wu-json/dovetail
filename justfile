@@ -1,6 +1,6 @@
 set shell := ["bash", "-cu"]
 
-version := `svu current --strip-prefix 2>/dev/null || echo "0.0.0"`
+version := `svu current 2>/dev/null | tr -d 'v' || echo "0.0.0"`
 image := "dovetail"
 
 # Show current version
@@ -14,7 +14,7 @@ version semver:
 # Bump version, commit, and tag
 bump-and-commit-version bump_type:
     #!/usr/bin/env bash
-    new_version=$(svu {{bump_type}} --strip-prefix)
+    new_version=$(svu {{bump_type}} | tr -d 'v')
     just version $new_version
     git add -A
     git commit -m "chore(release): v$new_version"
