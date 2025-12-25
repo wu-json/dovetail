@@ -1,5 +1,4 @@
 # Binaries
-dovetail
 *.exe
 *.exe~
 *.dll
@@ -35,3 +34,5 @@ Thumbs.db
 
 # Tailscale state (for local dev)
 /state/
+
+/dist
