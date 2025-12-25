@@ -8,8 +8,9 @@
 #   supported_envs:
 #   - all
 registries:
-- type: standard
-  ref: v4.447.1 # renovate: depName=aquaproj/aqua-registry
+  - type: standard
+    ref: v4.447.1 # renovate: depName=aquaproj/aqua-registry
 packages:
-- name: casey/just@1.45.0
-- name: golang/go@go1.25.5
+  - name: casey/just@1.45.0
+  - name: golang/go@go1.25.5
+  - name: caarlos0/svu@v3.3.0

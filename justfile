@@ -1,7 +1,25 @@
 set shell := ["bash", "-cu"]
 
-version := `git describe --tags --always --dirty 2>/dev/null || echo "dev"`
+version := `svu current --strip-prefix 2>/dev/null || echo "0.0.0"`
 image := "dovetail"
+
+# Show current version
+current-version:
+    @echo {{version}}
+
+# Set version to a specific semver
+version semver:
+    echo "{{semver}}" > VERSION
+
+# Bump version, commit, and tag
+bump-and-commit-version bump_type:
+    #!/usr/bin/env bash
+    new_version=$(svu {{bump_type}} --strip-prefix)
+    just version $new_version
+    git add -A
+    git commit -m "chore(release): v$new_version"
+    git tag -a v$new_version -m "Release v$new_version"
+    git push --follow-tags
 
 build:
     mkdir -p dist
