@@ -9,6 +9,7 @@ Dovetail is a lightweight Go application that automatically exposes Docker conta
 - Minimal configuration: use Docker labels to declare intent
 - Automatic discovery: watch for container start/stop events
 - One service per container: each exposed container gets a unique tailnet hostname
+- Identity forwarding: inject Tailscale user info into requests for backend auth
 - Simple deployment: runs as a Docker container
 
 ## Architecture
@@ -152,6 +153,15 @@ func (s *Service) startProxy(ctx context.Context) error {
         Director: func(req *http.Request) {
             req.URL.Scheme = "http"
             req.URL.Host = s.targetURL
+
+            // Inject Tailscale identity headers
+            whois, err := s.server.LocalClient().WhoIs(req.Context(), req.RemoteAddr)
+            if err == nil && whois.UserProfile != nil {
+                req.Header.Set("X-Tailscale-User", whois.UserProfile.LoginName)
+                req.Header.Set("X-Tailscale-Name", whois.UserProfile.DisplayName)
+                req.Header.Set("X-Tailscale-Login", whois.Node.ComputedName)
+                req.Header.Set("X-Tailscale-Tailnet", whois.Node.Hostinfo.Hostname())
+            }
         },
     }
 
@@ -164,6 +174,32 @@ func (s *Service) startProxy(ctx context.Context) error {
 ```
 
 TLS is terminated at the Tailscale service; traffic to containers uses HTTP over the internal Docker network.
+
+### 4. Identity Headers
+
+Dovetail injects Tailscale identity information into requests forwarded to backend services. This enables backends to authenticate users without implementing their own auth.
+
+| Header | Description | Example |
+|--------|-------------|---------|
+| `X-Tailscale-User` | User's login email | `alice@example.com` |
+| `X-Tailscale-Name` | User's display name | `Alice Smith` |
+| `X-Tailscale-Login` | Node's computed name | `alice-macbook` |
+| `X-Tailscale-Tailnet` | Tailnet identifier | `example.com` |
+
+Backend services can trust these headers since traffic only arrives through the tailnet (already authenticated by Tailscale).
+
+**Example usage in backend:**
+
+```go
+func handler(w http.ResponseWriter, r *http.Request) {
+    user := r.Header.Get("X-Tailscale-User")
+    if user == "" {
+        http.Error(w, "unauthorized", 401)
+        return
+    }
+    fmt.Fprintf(w, "Hello, %s!", user)
+}
+```
 
 ## Configuration
 
