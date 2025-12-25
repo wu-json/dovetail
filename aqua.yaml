@@ -4,3 +4,4 @@ registries:
 
 packages:
   - name: golang/go@go1.25.5
+  - name: casey/just@1.38.0

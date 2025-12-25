@@ -17,11 +17,8 @@ jobs:
         with:
           aqua_version: v2.43.1
 
-      - name: Download dependencies
-        run: go mod download
-
       - name: Build
-        run: go build -v ./...
+        run: just build
 
       - name: Test
-        run: go test -v ./...
+        run: just test
