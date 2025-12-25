@@ -9,7 +9,7 @@ Dovetail is a lightweight Go application that automatically exposes Docker conta
 - Minimal configuration: use Docker labels to declare intent
 - Automatic discovery: watch for container start/stop events
 - One service per container: each exposed container gets a unique tailnet hostname
-- Simple deployment: single binary, runs as a container or daemon
+- Simple deployment: runs as a Docker container
 
 ## Architecture
 
@@ -226,8 +226,6 @@ This allows services to maintain their identity across restarts.
 
 ## Deployment
 
-### As a Docker Container (Recommended)
-
 ```yaml
 version: "3.8"
 services:
@@ -242,16 +240,6 @@ services:
 
 volumes:
   dovetail-state:
-```
-
-### As a System Daemon
-
-```bash
-# Install
-sudo cp dovetail /usr/local/bin/
-
-# Run
-TS_AUTHKEY=tskey-auth-xxx dovetail
 ```
 
 ## Error Handling
