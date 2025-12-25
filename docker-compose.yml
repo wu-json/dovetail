@@ -8,5 +8,12 @@ services:
       - dovetail-state:/var/lib/dovetail
     restart: unless-stopped
 
+  # test server
+  hello:
+    image: traefik/whoami
+    labels:
+      dovetail.name: "hello"
+      dovetail.port: "80"
+
 volumes:
   dovetail-state:
