@@ -1,0 +1,7 @@
+registries:
+  - type: standard
+    ref: v4.311.0
+
+packages:
+  - name: golang/go@go1.25.5
+  - name: casey/just@1.38.0

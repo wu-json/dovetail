@@ -1,0 +1,24 @@
+name: Source Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  source-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install aqua
+        uses: aquaproj/aqua-installer@v3.1.1
+        with:
+          aqua_version: v2.43.1
+
+      - name: Build
+        run: just build
+
+      - name: Test
+        run: just test
