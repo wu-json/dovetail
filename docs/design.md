@@ -54,6 +54,7 @@ Containers opt-in to exposure by setting a `dovetail.name` label. The presence o
 |-------|----------|-------------|---------|
 | `dovetail.name` | Yes | Service name on the tailnet (presence enables exposure) | `myapp` |
 | `dovetail.port` | Yes | Container port to expose | `8080` |
+| `dovetail.network` | No | Docker network to use for routing (for multi-network containers) | `backend` |
 
 ### Example Docker Compose
 
@@ -207,10 +208,10 @@ Dovetail itself requires minimal configuration:
 
 | Environment Variable | Required | Description |
 |---------------------|----------|-------------|
-| `TS_AUTHKEY` | Yes* | Tailscale auth key for new services |
+| `TS_AUTHKEY` | Yes* | Tailscale auth key for new services (must be reusable) |
 | `TS_STATE_DIR` | No | Directory to persist Tailscale state (default: `/var/lib/dovetail`) |
 
-*Can use `TS_AUTHKEY` or interactive auth on first run.
+*Can use `TS_AUTHKEY` or interactive auth on first run. The auth key must be [reusable](https://tailscale.com/kb/1085/auth-keys) since Dovetail creates a new Tailscale node for each exposed service.
 
 ## Lifecycle
 
@@ -286,6 +287,16 @@ volumes:
 - **Container IP unavailable**: Skip container, log warning
 - **Tailscale auth failure**: Log error, skip service creation
 - **Port conflict**: Each service gets its own tsnet server, no conflicts
+- **Duplicate service name**: First container wins; subsequent containers with the same `dovetail.name` are skipped with an error log
+- **Container IP change**: If a container's IP changes (e.g., after restart), the watcher detects this and updates the proxy target without recreating the Tailscale service
+
+## Network Selection
+
+When a container is connected to multiple Docker networks, Dovetail selects the target IP using the following priority:
+
+1. Network specified via `dovetail.network` label (if provided)
+2. Bridge network (if connected)
+3. First available network (alphabetically)
 
 ## Future Considerations
 
