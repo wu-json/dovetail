@@ -1,217 +1,274 @@
-# Dovetail Design
-
-A Go service that exposes local services on a Tailnet using `tsnet`.
+# Dovetail Design Document
 
 ## Overview
 
-Dovetail runs as a single container that joins your Tailnet and proxies incoming connections to backend services on the same Docker network. No public ports are exposed—all traffic flows through Tailscale's encrypted WireGuard tunnel.
+Dovetail is a lightweight Go application that automatically exposes Docker containers to a Tailscale tailnet using Docker labels for configuration. Each labeled container gets its own service name on the tailnet (e.g., `myapp.me.ts.net`).
+
+## Goals
+
+- Minimal configuration: use Docker labels to declare intent
+- Automatic discovery: watch for container start/stop events
+- One service per container: each exposed container gets a unique tailnet hostname
+- Simple deployment: single binary, runs as a container or daemon
 
 ## Architecture
 
 ```
-                         ┌─────────────────────────────┐
-                         │   Tailscale Coordination    │
-                         │   (login.tailscale.com)     │
-                         └─────────────┬───────────────┘
-                                       │
-                                       │ WireGuard tunnel
-                                       │ (NAT traversal)
-                                       │
-┌──────────────────────────────────────┼────────────────────────────────────┐
-│ Your Tailnet                         │                                    │
-│                                      │                                    │
-│  ┌─────────────┐  ┌─────────────┐    │                                    │
-│  │ Laptop      │  │ Phone       │    │                                    │
-│  │ 100.64.0.10 │  │ 100.64.0.11 │    │                                    │
-│  └──────┬──────┘  └──────┬──────┘    │                                    │
-│         │                │           │                                    │
-│         │   Requests     │           │                                    │
-│         │   over Tailnet │           │                                    │
-│         ▼                ▼           ▼                                    │
-│  ┌────────────────────────────────────────────────────────────────────┐   │
-│  │ Docker Host                                                        │   │
-│  │                                                                    │   │
-│  │  ┌──────────────────────────────────────────────────────────────┐  │   │
-│  │  │ Docker Network                                               │  │   │
-│  │  │                                                              │  │   │
-│  │  │  ┌─────────────────────────────────────────┐                 │  │   │
-│  │  │  │ dovetail container       100.64.0.50    │                 │  │   │
-│  │  │  │ ┌─────────────────────────────────────┐ │                 │  │   │
-│  │  │  │ │ tsnet.Server                        │ │                 │  │   │
-│  │  │  │ │  - Hostname: "services"             │ │                 │  │   │
-│  │  │  │ │  - AuthKey: TS_AUTHKEY              │ │                 │  │   │
-│  │  │  │ │  - Listen(:3000) ──────────────────────────► web:3000   │  │   │
-│  │  │  │ │  - Listen(:8080) ──────────────────────────► api:8080   │  │   │
-│  │  │  │ │  - Listen(:5432) ──────────────────────────► db:5432    │  │   │
-│  │  │  │ └─────────────────────────────────────┘ │                 │  │   │
-│  │  │  └─────────────────────────────────────────┘                 │  │   │
-│  │  │                        │                                     │  │   │
-│  │  │          ┌─────────────┼─────────────┐                       │  │   │
-│  │  │          │             │             │                       │  │   │
-│  │  │          ▼             ▼             ▼                       │  │   │
-│  │  │   ┌──────────┐  ┌──────────┐  ┌──────────┐                   │  │   │
-│  │  │   │   web    │  │   api    │  │    db    │                   │  │   │
-│  │  │   │  :3000   │  │  :8080   │  │  :5432   │                   │  │   │
-│  │  │   └──────────┘  └──────────┘  └──────────┘                   │  │   │
-│  │  │                                                              │  │   │
-│  │  └──────────────────────────────────────────────────────────────┘  │   │
-│  └────────────────────────────────────────────────────────────────────┘   │
-│                                                                           │
-└───────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                        Tailnet                              │
+│   myapp1.me.ts.net    myapp2.me.ts.net    myapp3.me.ts.net │
+└──────────┬───────────────────┬───────────────────┬──────────┘
+           │                   │                   │
+┌──────────┴───────────────────┴───────────────────┴──────────┐
+│                         Dovetail                            │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │
+│  │ TS Service  │  │ TS Service  │  │ TS Service  │          │
+│  │   myapp1    │  │   myapp2    │  │   myapp3    │          │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘          │
+│         │                │                │                 │
+│  ┌──────┴────────────────┴────────────────┴──────┐          │
+│  │              Reverse Proxy Layer              │          │
+│  └──────┬────────────────┬────────────────┬──────┘          │
+│         │                │                │                 │
+│  ┌──────┴──────┐  ┌──────┴──────┐  ┌──────┴──────┐          │
+│  │ Container   │  │ Container   │  │ Container   │          │
+│  │ Watcher     │  │ Watcher     │  │ Watcher     │          │
+│  └─────────────┘  └─────────────┘  └─────────────┘          │
+└─────────────────────────────────────────────────────────────┘
+           │                   │                   │
+┌──────────┴───────────────────┴───────────────────┴──────────┐
+│                     Docker Daemon                           │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │
+│  │ container1  │  │ container2  │  │ container3  │          │
+│  │ :8080       │  │ :3000       │  │ :5432       │          │
+│  └─────────────┘  └─────────────┘  └─────────────┘          │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Request Flow
+## Docker Labels
 
-1. Client on Tailnet requests `services:3000` (or `100.64.0.50:3000`)
-2. Tailscale routes through encrypted WireGuard tunnel
-3. `tsnet.Server` in dovetail container receives request
-4. Dovetail proxies to `web:3000` on Docker network
-5. Response returns via same path
+Containers opt-in to exposure via labels:
 
-## Authentication
+| Label | Required | Description | Example |
+|-------|----------|-------------|---------|
+| `dovetail.enable` | Yes | Enable exposure for this container | `true` |
+| `dovetail.name` | Yes | Service name on the tailnet | `myapp` |
+| `dovetail.port` | Yes | Container port to expose | `8080` |
 
-### Auth Keys (not OAuth)
-
-Dovetail uses Tailscale **auth keys** for headless/Docker operation:
-
-| | Auth Keys | OAuth Clients |
-|---|---|---|
-| **Purpose** | Register devices to Tailnet | Access Tailscale API |
-| **Use case** | `tsnet.Server` joining network | Managing devices, ACLs, DNS |
-| **What it does** | "Let this container be a node" | "Let this app call admin APIs" |
-
-Generate auth key in: **Tailscale Admin → Settings → Keys → Generate auth key**
-
-Recommended options:
-- **Reusable** - same key works if container recreates
-- **Ephemeral** (optional) - device auto-removes when offline
-- **Tags** (optional) - e.g., `tag:docker` for ACL rules
-
-### Sharing Auth Keys
-
-A reusable auth key can register multiple containers, but each becomes a separate device:
-
-```
-Container A (TS_AUTHKEY=xxx) → Device "proxy-a" → 100.64.0.1
-Container B (TS_AUTHKEY=xxx) → Device "proxy-b" → 100.64.0.2
-```
-
-For a single device exposing multiple services, run one dovetail instance with multiple listeners.
-
-## State Management
-
-### Ephemeral (stateless container)
-
-```go
-srv := &tsnet.Server{
-    Hostname:  "services",
-    AuthKey:   os.Getenv("TS_AUTHKEY"),
-    Ephemeral: true,
-}
-```
-
-- No volume needed
-- Device disappears when container stops
-- Use reusable + ephemeral auth key
-
-### Persistent (survives restarts)
-
-```go
-srv := &tsnet.Server{
-    Hostname: "services",
-    AuthKey:  os.Getenv("TS_AUTHKEY"),
-    Dir:      "/data/tsnet",
-}
-```
-
-- Mount `/data/tsnet` as volume
-- Device stays registered across restarts
-- Auth key only needed on first run
-
-## Tailscale Versioning
-
-`tsnet` is part of the main Tailscale Go module. The version is baked into the binary at compile time:
-
-```go
-// go.mod
-require tailscale.com v1.76.1
-```
-
-This includes:
-- WireGuard implementation
-- Tailscale coordination client
-- DERP (relay) client
-- MagicDNS resolver
-
-Update with:
-```bash
-go get tailscale.com/tsnet@latest
-go mod tidy
-```
-
-## Docker Deployment
-
-### Dockerfile
-
-```dockerfile
-FROM golang:1.21-alpine AS builder
-WORKDIR /app
-COPY . .
-RUN go build -o /dovetail .
-
-FROM alpine:3.19
-RUN apk add --no-cache ca-certificates
-COPY --from=builder /dovetail /dovetail
-ENTRYPOINT ["/dovetail"]
-```
-
-### docker-compose.yml
+### Example Docker Compose
 
 ```yaml
+version: "3.8"
 services:
-  dovetail:
-    build: .
-    environment:
-      - TS_AUTHKEY=${TS_AUTHKEY}
-      - SERVICES=web:3000,api:8080,db:5432
-    volumes:
-      - tsnet-state:/data/tsnet
-
-  web:
-    image: nginx
+  webapp:
+    image: nginx:latest
+    labels:
+      dovetail.enable: "true"
+      dovetail.name: "webapp"
+      dovetail.port: "80"
 
   api:
-    image: my-api
+    image: myapi:latest
+    labels:
+      dovetail.enable: "true"
+      dovetail.name: "api"
+      dovetail.port: "3000"
 
-  db:
-    image: postgres
-
-volumes:
-  tsnet-state:
+  database:
+    image: postgres:15
+    # No labels - not exposed to tailnet
 ```
 
-### Network Requirements
+### Example Docker Run
 
-- Outbound internet access to Tailscale coordination servers
-- No inbound ports required (Tailscale handles NAT traversal)
-- `network_mode: bridge` (default) works fine
+```bash
+docker run -d \
+  --label dovetail.enable=true \
+  --label dovetail.name=myservice \
+  --label dovetail.port=8080 \
+  myimage:latest
+```
+
+## Components
+
+### 1. Docker Watcher
+
+Monitors Docker daemon for container events:
+
+- **Start**: Check labels, register new Tailscale service if enabled
+- **Stop/Die**: Tear down corresponding Tailscale service
+- **Initial scan**: On startup, scan all running containers
+
+```go
+type DockerWatcher struct {
+    client *docker.Client
+    events chan ContainerEvent
+}
+
+type ContainerEvent struct {
+    Type        EventType // Start, Stop
+    ContainerID string
+    Config      *ServiceConfig
+}
+
+type ServiceConfig struct {
+    Name string // tailnet hostname
+    Port int    // container port
+    IP   string // container IP address
+}
+```
+
+### 2. Tailscale Service Manager
+
+Manages Tailscale services using `tsnet`:
+
+```go
+type ServiceManager struct {
+    services map[string]*Service // keyed by container ID
+    mu       sync.RWMutex
+}
+
+type Service struct {
+    server    *tsnet.Server
+    name      string
+    targetURL string
+    cancel    context.CancelFunc
+}
+```
+
+Each service:
+- Creates a `tsnet.Server` with the configured hostname
+- Listens for incoming connections
+- Proxies traffic to the container's internal IP and port
+
+### 3. Reverse Proxy
+
+Simple HTTP reverse proxy per service:
+
+```go
+func (s *Service) startProxy(ctx context.Context) error {
+    ln, err := s.server.Listen("tcp", ":80")
+    if err != nil {
+        return err
+    }
+
+    proxy := &httputil.ReverseProxy{
+        Director: func(req *http.Request) {
+            req.URL.Scheme = "http"
+            req.URL.Host = s.targetURL
+        },
+    }
+
+    srv := &http.Server{Handler: proxy}
+    go srv.Serve(ln)
+
+    <-ctx.Done()
+    return srv.Shutdown(context.Background())
+}
+```
 
 ## Configuration
 
-Environment variables:
+Dovetail itself requires minimal configuration:
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `TS_AUTHKEY` | Yes (first run) | Tailscale auth key |
-| `TS_HOSTNAME` | No | Device name on Tailnet (default: `dovetail`) |
-| `SERVICES` | Yes | Comma-separated list of `backend:port` mappings |
-| `TS_STATE_DIR` | No | State directory (default: `/data/tsnet`) |
-| `TS_EPHEMERAL` | No | Set `true` for ephemeral mode |
+| Environment Variable | Required | Description |
+|---------------------|----------|-------------|
+| `TS_AUTHKEY` | Yes* | Tailscale auth key for new services |
+| `TS_STATE_DIR` | No | Directory to persist Tailscale state (default: `/var/lib/dovetail`) |
 
-## Security Considerations
+*Can use `TS_AUTHKEY` or interactive auth on first run.
 
-- All traffic encrypted via WireGuard
-- Only Tailnet members can reach exposed services
-- Use Tailscale ACLs to restrict which devices can access which ports
-- Backend services are not exposed to public internet
-- Auth keys should be treated as secrets
+## Lifecycle
+
+### Startup
+
+1. Connect to Docker daemon
+2. Scan running containers for `dovetail.enable=true`
+3. For each enabled container, create Tailscale service
+4. Start watching Docker events
+
+### Container Start
+
+1. Receive container start event
+2. Inspect container for dovetail labels
+3. If enabled:
+   - Extract name and port from labels
+   - Get container IP from Docker network
+   - Create new `tsnet.Server` with hostname
+   - Start reverse proxy to container
+
+### Container Stop
+
+1. Receive container stop/die event
+2. Look up service by container ID
+3. If found:
+   - Cancel service context
+   - Close Tailscale server
+   - Remove from service map
+
+### Shutdown
+
+1. Cancel all service contexts
+2. Wait for graceful shutdown
+3. Close Docker client
+
+## State Management
+
+Tailscale state is persisted per-service:
+
+```
+/var/lib/dovetail/
+├── myapp1/
+│   └── tailscaled.state
+├── myapp2/
+│   └── tailscaled.state
+└── myapp3/
+    └── tailscaled.state
+```
+
+This allows services to maintain their identity across restarts.
+
+## Deployment
+
+### As a Docker Container (Recommended)
+
+```yaml
+version: "3.8"
+services:
+  dovetail:
+    image: dovetail:latest
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - dovetail-state:/var/lib/dovetail
+    restart: unless-stopped
+
+volumes:
+  dovetail-state:
+```
+
+### As a System Daemon
+
+```bash
+# Install
+sudo cp dovetail /usr/local/bin/
+
+# Run
+TS_AUTHKEY=tskey-auth-xxx dovetail
+```
+
+## Error Handling
+
+- **Docker connection lost**: Retry with exponential backoff
+- **Container IP unavailable**: Skip container, log warning
+- **Tailscale auth failure**: Log error, skip service creation
+- **Port conflict**: Each service gets its own tsnet server, no conflicts
+
+## Future Considerations
+
+- TCP/UDP passthrough for non-HTTP services
+- Health checks before exposing service
+- Metrics endpoint for monitoring
+- Support for multiple ports per container
+- MagicDNS HTTPS certificates
