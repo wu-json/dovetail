@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -20,21 +19,9 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 
-	ver := version.Get()
-	displayVer := ver
-	if ver != "dev" {
-		displayVer = "v" + ver
-	}
-
-	fmt.Fprintf(os.Stderr, `
-    ╭──────────────────────────────────────╮
-    │           dovetail %-18s│
-    │   Automatic Tailscale for Docker     │
-    ╰──────────────────────────────────────╯
-`, displayVer)
-
 	logger.Info("starting",
-		"version", ver,
+		"service", "dovetail",
+		"version", version.Get(),
 		"go", runtime.Version(),
 		"os", runtime.GOOS,
 		"arch", runtime.GOARCH,
