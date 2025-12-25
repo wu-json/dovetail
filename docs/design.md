@@ -2,7 +2,7 @@
 
 ## Overview
 
-Dovetail is a lightweight Go application that automatically exposes Docker containers to a Tailscale tailnet using Docker labels for configuration. Each labeled container gets its own service name on the tailnet (e.g., `myapp.me.ts.net`).
+Dovetail is a lightweight Go application that automatically exposes Docker containers to a Tailscale tailnet over HTTPS using Docker labels for configuration. Each labeled container gets its own service name on the tailnet (e.g., `https://myapp.me.ts.net`).
 
 ## Goals
 
@@ -139,11 +139,11 @@ Each service:
 
 ### 3. Reverse Proxy
 
-Simple HTTP reverse proxy per service:
+HTTPS reverse proxy per service. Tailscale automatically provisions TLS certificates via MagicDNS:
 
 ```go
 func (s *Service) startProxy(ctx context.Context) error {
-    ln, err := s.server.Listen("tcp", ":80")
+    ln, err := s.server.ListenTLS("tcp", ":443")
     if err != nil {
         return err
     }
@@ -162,6 +162,8 @@ func (s *Service) startProxy(ctx context.Context) error {
     return srv.Shutdown(context.Background())
 }
 ```
+
+TLS is terminated at the Tailscale service; traffic to containers uses HTTP over the internal Docker network.
 
 ## Configuration
 
@@ -255,4 +257,3 @@ volumes:
 - Health checks before exposing service
 - Metrics endpoint for monitoring
 - Support for multiple ports per container
-- MagicDNS HTTPS certificates
