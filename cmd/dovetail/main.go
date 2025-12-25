@@ -27,13 +27,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create state directory if it doesn't exist
 	if err := os.MkdirAll(cfg.StateDir, 0700); err != nil {
 		logger.Error("failed to create state directory", "path", cfg.StateDir, "error", err)
 		os.Exit(1)
 	}
 
-	// Create Docker watcher
 	watcher, err := docker.NewWatcher(logger)
 	if err != nil {
 		logger.Error("failed to create docker watcher", "error", err)
@@ -41,14 +39,11 @@ func main() {
 	}
 	defer watcher.Close()
 
-	// Create service manager
 	manager := service.NewManager(cfg, logger)
 
-	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle shutdown signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -58,12 +53,10 @@ func main() {
 		cancel()
 	}()
 
-	// Watch for container events
 	events := watcher.Watch(ctx)
 
 	logger.Info("watching for container events")
 
-	// Process events
 	for event := range events {
 		logger.Debug("received event",
 			"type", event.Type.String(),
@@ -72,7 +65,6 @@ func main() {
 		manager.HandleEvent(ctx, event)
 	}
 
-	// Graceful shutdown
 	logger.Info("shutting down services")
 	manager.Shutdown()
 
