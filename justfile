@@ -8,6 +8,23 @@ build:
     mkdir -p dist
     go build -ldflags "-X main.version={{version}}" -o dist/dovetail ./cmd/dovetail
 
+# Build and run
+run: build
+    ./dist/dovetail
+
+# Run tests
+test:
+    go test -v ./...
+
+# Run linter
+lint:
+    golangci-lint run
+
+# Clean build artifacts
+clean:
+    rm -rf dist
+    go clean
+
 # Build multi-arch Docker image (amd64 + arm64)
 docker-build:
     docker buildx build --platform linux/amd64,linux/arm64 \
@@ -24,3 +41,11 @@ docker-push registry:
         -t {{registry}}/{{image}}:latest \
         --push \
         .
+
+# Run Docker container locally
+docker-run:
+    docker run --rm -it \
+        -v /var/run/docker.sock:/var/run/docker.sock:ro \
+        -v dovetail-state:/var/lib/dovetail \
+        -e TS_AUTHKEY \
+        {{image}}:latest
