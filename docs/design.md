@@ -47,12 +47,11 @@ Dovetail is a lightweight Go application that automatically exposes Docker conta
 
 ## Docker Labels
 
-Containers opt-in to exposure via labels:
+Containers opt-in to exposure by setting a `dovetail.name` label. The presence of this label indicates the container should be exposed.
 
 | Label | Required | Description | Example |
 |-------|----------|-------------|---------|
-| `dovetail.enable` | Yes | Enable exposure for this container | `true` |
-| `dovetail.name` | Yes | Service name on the tailnet | `myapp` |
+| `dovetail.name` | Yes | Service name on the tailnet (presence enables exposure) | `myapp` |
 | `dovetail.port` | Yes | Container port to expose | `8080` |
 
 ### Example Docker Compose
@@ -63,27 +62,24 @@ services:
   webapp:
     image: nginx:latest
     labels:
-      dovetail.enable: "true"
       dovetail.name: "webapp"
       dovetail.port: "80"
 
   api:
     image: myapi:latest
     labels:
-      dovetail.enable: "true"
       dovetail.name: "api"
       dovetail.port: "3000"
 
   database:
     image: postgres:15
-    # No labels - not exposed to tailnet
+    # No dovetail.name label - not exposed to tailnet
 ```
 
 ### Example Docker Run
 
 ```bash
 docker run -d \
-  --label dovetail.enable=true \
   --label dovetail.name=myservice \
   --label dovetail.port=8080 \
   myimage:latest
@@ -95,7 +91,7 @@ docker run -d \
 
 Monitors Docker daemon for container events:
 
-- **Start**: Check labels, register new Tailscale service if enabled
+- **Start**: Check for `dovetail.name` label, register new Tailscale service if present
 - **Stop/Die**: Tear down corresponding Tailscale service
 - **Initial scan**: On startup, scan all running containers
 
@@ -183,15 +179,15 @@ Dovetail itself requires minimal configuration:
 ### Startup
 
 1. Connect to Docker daemon
-2. Scan running containers for `dovetail.enable=true`
-3. For each enabled container, create Tailscale service
+2. Scan running containers for `dovetail.name` label
+3. For each labeled container, create Tailscale service
 4. Start watching Docker events
 
 ### Container Start
 
 1. Receive container start event
-2. Inspect container for dovetail labels
-3. If enabled:
+2. Inspect container for `dovetail.name` label
+3. If present:
    - Extract name and port from labels
    - Get container IP from Docker network
    - Create new `tsnet.Server` with hostname
