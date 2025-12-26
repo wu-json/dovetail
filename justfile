@@ -57,6 +57,8 @@ docker-push:
 		--push \
 		.
 
+release: copy-version docker-push
+
 docker-run:
 	docker run --rm -it \
 		-v /var/run/docker.sock:/var/run/docker.sock:ro \
