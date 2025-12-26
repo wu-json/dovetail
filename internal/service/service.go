@@ -38,10 +38,11 @@ func New(cfg *ServiceConfig, logger *slog.Logger) (*Service, error) {
 	}
 
 	server := &tsnet.Server{
-		Hostname: cfg.Name,
-		Dir:      filepath.Join(cfg.StateDir, cfg.Name),
-		AuthKey:  cfg.AuthKey,
-		Logf:     func(format string, args ...any) { logger.Debug(fmt.Sprintf(format, args...)) },
+		Hostname:  cfg.Name,
+		Dir:       filepath.Join(cfg.StateDir, cfg.Name),
+		AuthKey:   cfg.AuthKey,
+		Ephemeral: true,
+		Logf:      func(format string, args ...any) { logger.Debug(fmt.Sprintf(format, args...)) },
 	}
 
 	return &Service{
