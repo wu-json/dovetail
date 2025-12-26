@@ -44,6 +44,8 @@ services:
 
 Your service will be available at `https://webapp.<tailnet-name>.ts.net`.
 
+> **Note**: Dovetail and your target containers must be on the same Docker network for proxying to work. In a single `docker-compose.yml` file, services share a network by default. If running separately, create a shared network and connect both Dovetail and your containers to it.
+
 ## Configuration
 
 ### Environment Variables
