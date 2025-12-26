@@ -10,20 +10,49 @@ import (
 	"github.com/jasonwu/dovetail/internal/docker"
 )
 
+// ServiceInterface abstracts Service operations for testing
+type ServiceInterface interface {
+	Start(ctx context.Context) error
+	Stop() error
+	UpdateTarget(ip string, port int) error
+	Name() string
+}
+
+// ServiceFactory creates new services (for dependency injection in tests)
+type ServiceFactory func(cfg *ServiceConfig, logger *slog.Logger) (ServiceInterface, error)
+
+// DefaultServiceFactory creates real Service instances
+func DefaultServiceFactory(cfg *ServiceConfig, logger *slog.Logger) (ServiceInterface, error) {
+	return New(cfg, logger)
+}
+
 type Manager struct {
-	config   *config.Config
-	services map[string]*Service    // keyed by container ID
-	names    map[string]string      // service name -> container ID (for duplicate detection)
-	mu       sync.RWMutex
-	logger   *slog.Logger
+	config         *config.Config
+	services       map[string]ServiceInterface // keyed by container ID
+	names          map[string]string           // service name -> container ID (for duplicate detection)
+	mu             sync.RWMutex
+	logger         *slog.Logger
+	serviceFactory ServiceFactory
 }
 
 func NewManager(cfg *config.Config, logger *slog.Logger) *Manager {
 	return &Manager{
-		config:   cfg,
-		services: make(map[string]*Service),
-		names:    make(map[string]string),
-		logger:   logger,
+		config:         cfg,
+		services:       make(map[string]ServiceInterface),
+		names:          make(map[string]string),
+		logger:         logger,
+		serviceFactory: DefaultServiceFactory,
+	}
+}
+
+// NewManagerWithFactory creates a Manager with a custom ServiceFactory (for testing)
+func NewManagerWithFactory(cfg *config.Config, logger *slog.Logger, factory ServiceFactory) *Manager {
+	return &Manager{
+		config:         cfg,
+		services:       make(map[string]ServiceInterface),
+		names:          make(map[string]string),
+		logger:         logger,
+		serviceFactory: factory,
 	}
 }
 
@@ -68,7 +97,7 @@ func (m *Manager) handleStart(ctx context.Context, event docker.ContainerEvent) 
 	m.mu.Unlock()
 
 	// Create and start new service
-	svc, err := New(&ServiceConfig{
+	svc, err := m.serviceFactory(&ServiceConfig{
 		Name:     cfg.Name,
 		TargetIP: cfg.IP,
 		Port:     cfg.Port,
@@ -133,18 +162,18 @@ func (m *Manager) handleStop(event docker.ContainerEvent) {
 
 func (m *Manager) Shutdown() {
 	m.mu.Lock()
-	services := make([]*Service, 0, len(m.services))
+	services := make([]ServiceInterface, 0, len(m.services))
 	for _, svc := range m.services {
 		services = append(services, svc)
 	}
-	m.services = make(map[string]*Service)
+	m.services = make(map[string]ServiceInterface)
 	m.names = make(map[string]string)
 	m.mu.Unlock()
 
 	var wg sync.WaitGroup
 	for _, svc := range services {
 		wg.Add(1)
-		go func(s *Service) {
+		go func(s ServiceInterface) {
 			defer wg.Done()
 			if err := s.Stop(); err != nil {
 				m.logger.Error("failed to stop service during shutdown",

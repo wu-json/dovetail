@@ -1,13 +1,14 @@
 package proxy
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"sync/atomic"
 
-	"tailscale.com/client/tailscale"
+	"tailscale.com/client/tailscale/apitype"
 )
 
 const (
@@ -17,14 +18,19 @@ const (
 	HeaderTailnet = "X-Tailscale-Tailnet"
 )
 
+// LocalClient abstracts the Tailscale local client for testing
+type LocalClient interface {
+	WhoIs(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error)
+}
+
 type Proxy struct {
 	target      atomic.Pointer[url.URL]
-	localClient *tailscale.LocalClient
+	localClient LocalClient
 	logger      *slog.Logger
 	handler     http.Handler
 }
 
-func New(targetURL *url.URL, localClient *tailscale.LocalClient, logger *slog.Logger) *Proxy {
+func New(targetURL *url.URL, localClient LocalClient, logger *slog.Logger) *Proxy {
 	p := &Proxy{
 		localClient: localClient,
 		logger:      logger,

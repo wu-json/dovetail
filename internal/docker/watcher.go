@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
@@ -18,6 +19,14 @@ const (
 	LabelName = "dovetail.name"
 	LabelPort = "dovetail.port"
 )
+
+// DockerClient abstracts the Docker client for testing
+type DockerClient interface {
+	ContainerList(ctx context.Context, options container.ListOptions) ([]types.Container, error)
+	ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error)
+	Events(ctx context.Context, options events.ListOptions) (<-chan events.Message, <-chan error)
+	Close() error
+}
 
 type EventType int
 
@@ -51,7 +60,7 @@ type ContainerEvent struct {
 }
 
 type Watcher struct {
-	client *client.Client
+	client DockerClient
 	logger *slog.Logger
 }
 
@@ -65,6 +74,14 @@ func NewWatcher(logger *slog.Logger) (*Watcher, error) {
 		client: cli,
 		logger: logger,
 	}, nil
+}
+
+// NewWatcherWithClient creates a Watcher with a custom DockerClient (for testing)
+func NewWatcherWithClient(cli DockerClient, logger *slog.Logger) *Watcher {
+	return &Watcher{
+		client: cli,
+		logger: logger,
+	}
 }
 
 func (w *Watcher) Close() error {
