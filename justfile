@@ -5,61 +5,61 @@ image := "dovetail"
 
 # Show current version
 current-version:
-    @echo {{version}}
+	@echo {{version}}
 
 # Set version to a specific semver
 version semver:
-    echo "{{semver}}" > VERSION
+	echo "{{semver}}" > VERSION
 
 # Bump version, commit, and tag
 bump-and-commit-version bump_type:
-    #!/usr/bin/env bash
-    new_version=$(svu {{bump_type}} | tr -d 'v')
-    just version $new_version
-    git add -A
-    git commit -m "chore(release): v$new_version"
-    git tag -a v$new_version -m "Release v$new_version"
-    git push --follow-tags
+	#!/usr/bin/env bash
+	new_version=$(svu {{bump_type}} | tr -d 'v')
+	just version $new_version
+	git add -A
+	git commit -m "chore(release): v$new_version"
+	git tag -a v$new_version -m "Release v$new_version"
+	git push --follow-tags
 
 build:
-    mkdir -p dist
-    go build -o dist/dovetail ./cmd/dovetail
+	mkdir -p dist
+	go build -o dist/dovetail ./cmd/dovetail
 
 # Copy root VERSION to embedded location for release builds
 copy-version:
-    cp VERSION internal/version/VERSION
+	cp VERSION internal/version/VERSION
 
 run: build
-    ./dist/dovetail
+	./dist/dovetail
 
 test:
-    go test -v ./...
+	go test -v ./...
 
 lint:
-    golangci-lint run
+	golangci-lint run
 
 clean:
-    rm -rf dist
-    go clean
+	rm -rf dist
+	go clean
 
 docker-build:
-    docker buildx build --platform linux/amd64,linux/arm64 \
-        --build-arg VERSION={{version}} \
-        -t {{image}}:{{version}} \
-        -t {{image}}:latest \
-        .
+	docker buildx build --platform linux/amd64,linux/arm64 \
+		--build-arg VERSION={{version}} \
+		-t {{image}}:{{version}} \
+		-t {{image}}:latest \
+		.
 
 docker-push registry:
-    docker buildx build --platform linux/amd64,linux/arm64 \
-        --build-arg VERSION={{version}} \
-        -t {{registry}}/{{image}}:{{version}} \
-        -t {{registry}}/{{image}}:latest \
-        --push \
-        .
+	docker buildx build --platform linux/amd64,linux/arm64 \
+		--build-arg VERSION={{version}} \
+		-t {{registry}}/{{image}}:{{version}} \
+		-t {{registry}}/{{image}}:latest \
+		--push \
+		.
 
 docker-run:
-    docker run --rm -it \
-        -v /var/run/docker.sock:/var/run/docker.sock:ro \
-        -v dovetail-state:/var/lib/dovetail \
-        -e TS_AUTHKEY \
-        {{image}}:latest
+	docker run --rm -it \
+		-v /var/run/docker.sock:/var/run/docker.sock:ro \
+		-v dovetail-state:/var/lib/dovetail \
+		-e TS_AUTHKEY \
+		{{image}}:latest
