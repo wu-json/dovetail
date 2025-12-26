@@ -7,6 +7,7 @@ on:
         required: true
         type: choice
         options:
+          - none
           - patch
           - minor
           - major
@@ -32,6 +33,7 @@ jobs:
           aqua_version: v2.43.1
 
       - name: Version
+        if: ${{ github.event.inputs.version_type != 'none' }}
         run: just bump-and-commit-version ${{ github.event.inputs.version_type }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
