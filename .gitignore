@@ -36,3 +36,5 @@ Thumbs.db
 /state/
 
 /dist
+
+**/*.local.*
