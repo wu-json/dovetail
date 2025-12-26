@@ -49,11 +49,11 @@ docker-build:
 		-t {{image}}:latest \
 		.
 
-docker-push registry:
+docker-push:
 	docker buildx build --platform linux/amd64,linux/arm64 \
 		--build-arg VERSION={{version}} \
-		-t {{registry}}/{{image}}:{{version}} \
-		-t {{registry}}/{{image}}:latest \
+		-t wujson/dovetail:{{version}} \
+		-t wujson/dovetail:latest \
 		--push \
 		.
 
