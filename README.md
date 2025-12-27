@@ -19,17 +19,10 @@ Dovetail is a lightweight reverse proxy that automatically exposes Docker contai
 </tr>
 </table>
 
-## Key Features
-
-- **Automatic Discovery**: Monitors Docker for container events and exposes labeled services
-- **Zero Configuration TLS**: Tailscale handles certificate provisioning automatically
-- **Identity Headers**: Injects Tailscale user info (`X-Tailscale-User`, `X-Tailscale-Name`, etc.) into proxied requests
-- **Persistent Identity**: Services maintain their Tailscale identity across restarts
-
 ## Installation
 
 ```bash
-docker pull ghcr.io/wu-json/dovetail:latest
+docker pull wujson/dovetail:latest
 ```
 
 ## Usage
@@ -50,7 +43,7 @@ Run dovetail alongside your containers:
 ```yaml
 services:
   dovetail:
-    image: ghcr.io/wu-json/dovetail:latest
+    image: wujson/dovetail:latest
     environment:
       - TS_AUTHKEY=${TS_AUTHKEY}
     volumes:
@@ -61,7 +54,57 @@ services:
 
 Your service will be available at `https://webapp.<tailnet-name>.ts.net`.
 
-> **Note**: Dovetail and your target containers must be on the same Docker network for proxying to work. In a single `docker-compose.yml` file, services share a network by default. If running separately, create a shared network and connect both Dovetail and your containers to it.
+## Docker Networking Requirements
+
+**Important**: Dovetail must be able to reach your containers over the Docker network. This means they need to be on the same Docker network.
+
+### Same docker-compose.yml (Automatic)
+
+If Dovetail and your containers are defined in the same `docker-compose.yml` file, they automatically share a network. No additional configuration needed.
+
+### Separate docker-compose.yml or `docker run` (Manual Setup)
+
+If you're running Dovetail separately from your containers, you need to create a shared network:
+
+**1. Create a shared network:**
+```bash
+docker network create dovetail-network
+```
+
+**2. Add Dovetail to the network:**
+```yaml
+services:
+  dovetail:
+    image: wujson/dovetail:latest
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./dovetail-state:/var/lib/dovetail
+    networks:
+      - dovetail-network
+    restart: unless-stopped
+
+networks:
+  dovetail-network:
+    external: true
+```
+
+**3. Add your containers to the same network:**
+```yaml
+services:
+  myapp:
+    image: nginx:latest
+    labels:
+      dovetail.name: "myapp"
+      dovetail.port: "80"
+    networks:
+      - dovetail-network
+
+networks:
+  dovetail-network:
+    external: true
+```
 
 ## Configuration
 
