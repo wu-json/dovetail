@@ -2,6 +2,8 @@
 
 Dovetail is a lightweight reverse proxy that automatically exposes Docker containers to your Tailscale tailnet over HTTPS. Simply add labels to your containers and they become accessible as secure endpoints on your private network.
 
+<img width="598" height="598" alt="スクリーンショット 2025-12-27 午前10 17 15" src="https://github.com/user-attachments/assets/e6c0a8a2-3bcf-478e-ae42-b1334ba2efc0" />
+
 ## Key Features
 
 - **Automatic Discovery**: Monitors Docker for container events and exposes labeled services
