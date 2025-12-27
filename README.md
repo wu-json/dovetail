@@ -28,9 +28,9 @@ While searching for alternatives, I found [tsbridge](https://github.com/jtdowney
 I actually built and deployed this to my homelab in a few hours after a drunk Christmas dinner, and now I'm giving it to you... Merry Christmas.
 
 ### Cursed Thought
-It's very empowering to generate custom software for yourself so easily now, but it also feels pretty weird right? Open-source serves as a critical foundation for training data for coding models, but as a result the threshold for justifying direct use of an open-source project has ballooned due to the significant decrease in cost to write and maintain. The litmus test of "can I write and maintain this" now reads positive more times than we are used to.
+It's very empowering to generate custom software for yourself so easily now, but it also feels pretty weird right? Open-source serves as a critical foundation for training data for coding models, but as a result the threshold for justifying direct use of open-source projects has ballooned due to the significant decrease in cost to write and maintain. The litmus test of "can I write and maintain this" now reads positive more times than we are used to.
 
-Ironically, there's something less personal about generating personalized software with AI coding tools. Running open-source is like running the author's heart on your machine. You're exposed to their personality, opinion, and decisions whether right or wrong, down to the very last bit. In a world where we skip the human and cherry pick the ideas and features we like, we detract ourselves from all of this, turning the art of sharing into a process of extraction.
+Ironically, there's something less personal about generating personalized software with AI coding tools. Running open-source is like running the author's heart on your machine. You're exposed to their personality, opinions, and decisions whether right or wrong, down to the very last bit. In a world where we skip the human and cherry pick the ideas and features we like, we detract ourselves from all of this, turning the art of sharing into a process of extraction.
 
 It feels somewhat lonely.
 
