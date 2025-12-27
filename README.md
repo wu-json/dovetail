@@ -19,6 +19,14 @@ Dovetail is a lightweight reverse proxy that automatically exposes Docker contai
 </tr>
 </table>
 
+## Origin Story
+
+I've recently fallen back into the [homelabbing](https://www.reddit.com/r/homelab/wiki/introduction/) rabbit hole and wanted to set up remote access to an [Immich](https://immich.app/) server for my photography work so I could travel and still look at stupid 4k cat photos on the go. In that search I discovered [tsdproxy](https://github.com/almeidapaulopt/tsdproxy), which worked but hasn't been updated in months, which made my anxiety-ridden brain melt a bit. Imagine my ass sitting sitting in a coffee shop in Asia losing access to my remote home-server - how else am I supposed to generate images of cats doing the [海底捞 dance](https://www.reddit.com/r/TikTok/comments/1cnnikk/someone_please_explain_those_chinese_guys_that_do/)?
+
+While searching for alternatives, I found [tsbridge](https://github.com/jtdowney/tsbridge) which honestly probably would have worked pretty well for my use-case, but since we have AI coding tools now I figured that making my own version with just the features I would use would be simple enough and a good learning opportunity (for both me and Anthropic),
+
+I actually built and deployed this to my homelab in a few hours after a drunk Christmas dinner.
+
 ## Installation
 
 ```bash
