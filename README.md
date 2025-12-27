@@ -38,7 +38,7 @@ services:
       - TS_AUTHKEY=${TS_AUTHKEY}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - dovetail-state:/var/lib/dovetail
+      - ./dovetail-state:/var/lib/dovetail
     restart: unless-stopped
 ```
 
