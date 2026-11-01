@@ -4,40 +4,41 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/netip"
 	"testing"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/events"
-	"github.com/docker/docker/api/types/network"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/events"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/client"
 )
 
 // mockDockerClient implements DockerClient for testing
 type mockDockerClient struct {
-	containers      []types.Container
-	containerJSON   types.ContainerJSON
-	listErr         error
-	inspectErr      error
-	eventsChan      chan events.Message
-	eventsErrChan   chan error
+	containers    []container.Summary
+	containerJSON container.InspectResponse
+	listErr       error
+	inspectErr    error
+	eventsChan    chan events.Message
+	eventsErrChan chan error
 }
 
-func (m *mockDockerClient) ContainerList(ctx context.Context, options container.ListOptions) ([]types.Container, error) {
+func (m *mockDockerClient) ContainerList(ctx context.Context, options client.ContainerListOptions) (client.ContainerListResult, error) {
 	if m.listErr != nil {
-		return nil, m.listErr
+		return client.ContainerListResult{}, m.listErr
 	}
-	return m.containers, nil
+	return client.ContainerListResult{Items: m.containers}, nil
 }
 
-func (m *mockDockerClient) ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error) {
+func (m *mockDockerClient) ContainerInspect(ctx context.Context, containerID string, options client.ContainerInspectOptions) (client.ContainerInspectResult, error) {
 	if m.inspectErr != nil {
-		return types.ContainerJSON{}, m.inspectErr
+		return client.ContainerInspectResult{}, m.inspectErr
 	}
-	return m.containerJSON, nil
+	return client.ContainerInspectResult{Container: m.containerJSON}, nil
 }
 
-func (m *mockDockerClient) Events(ctx context.Context, options events.ListOptions) (<-chan events.Message, <-chan error) {
-	return m.eventsChan, m.eventsErrChan
+func (m *mockDockerClient) Events(ctx context.Context, options client.EventsListOptions) client.EventsResult {
+	return client.EventsResult{Messages: m.eventsChan, Err: m.eventsErrChan}
 }
 
 func (m *mockDockerClient) Close() error {
@@ -68,11 +69,11 @@ func TestGetContainerIP(t *testing.T) {
 	w := NewWatcherWithClient(&mockDockerClient{}, logger)
 
 	tests := []struct {
-		name       string
-		networks   map[string]*network.EndpointSettings
-		wantIP     string
-		wantNet    string
-		wantErr    bool
+		name     string
+		networks map[string]*network.EndpointSettings
+		wantIP   string
+		wantNet  string
+		wantErr  bool
 	}{
 		{
 			name:     "no networks",
@@ -82,8 +83,8 @@ func TestGetContainerIP(t *testing.T) {
 		{
 			name: "bridge network takes priority",
 			networks: map[string]*network.EndpointSettings{
-				"custom": {IPAddress: "172.20.0.2"},
-				"bridge": {IPAddress: "172.17.0.2"},
+				"custom": {IPAddress: netip.MustParseAddr("172.20.0.2")},
+				"bridge": {IPAddress: netip.MustParseAddr("172.17.0.2")},
 			},
 			wantIP:  "172.17.0.2",
 			wantNet: "bridge",
@@ -91,8 +92,8 @@ func TestGetContainerIP(t *testing.T) {
 		{
 			name: "fallback to alphabetically first network",
 			networks: map[string]*network.EndpointSettings{
-				"zebra":  {IPAddress: "172.30.0.2"},
-				"alpha":  {IPAddress: "172.20.0.2"},
+				"zebra": {IPAddress: netip.MustParseAddr("172.30.0.2")},
+				"alpha": {IPAddress: netip.MustParseAddr("172.20.0.2")},
 			},
 			wantIP:  "172.20.0.2",
 			wantNet: "alpha",
@@ -100,8 +101,8 @@ func TestGetContainerIP(t *testing.T) {
 		{
 			name: "skip networks without IP",
 			networks: map[string]*network.EndpointSettings{
-				"alpha": {IPAddress: ""},
-				"beta":  {IPAddress: "172.20.0.2"},
+				"alpha": {},
+				"beta":  {IPAddress: netip.MustParseAddr("172.20.0.2")},
 			},
 			wantIP:  "172.20.0.2",
 			wantNet: "beta",
@@ -109,16 +110,16 @@ func TestGetContainerIP(t *testing.T) {
 		{
 			name: "all networks without valid IP",
 			networks: map[string]*network.EndpointSettings{
-				"alpha": {IPAddress: ""},
-				"beta":  {IPAddress: ""},
+				"alpha": {},
+				"beta":  {},
 			},
 			wantErr: true,
 		},
 		{
 			name: "bridge network without IP falls back",
 			networks: map[string]*network.EndpointSettings{
-				"bridge": {IPAddress: ""},
-				"custom": {IPAddress: "172.20.0.2"},
+				"bridge": {},
+				"custom": {IPAddress: netip.MustParseAddr("172.20.0.2")},
 			},
 			wantIP:  "172.20.0.2",
 			wantNet: "custom",
@@ -156,7 +157,7 @@ func TestInspectContainer(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		containerJSON types.ContainerJSON
+		containerJSON container.InspectResponse
 		inspectErr    error
 		wantConfig    *ServiceConfig
 		wantErr       bool
@@ -168,7 +169,7 @@ func TestInspectContainer(t *testing.T) {
 		},
 		{
 			name: "missing name label",
-			containerJSON: types.ContainerJSON{
+			containerJSON: container.InspectResponse{
 				Config: &container.Config{
 					Labels: map[string]string{
 						LabelPort: "8080",
@@ -179,7 +180,7 @@ func TestInspectContainer(t *testing.T) {
 		},
 		{
 			name: "empty name label",
-			containerJSON: types.ContainerJSON{
+			containerJSON: container.InspectResponse{
 				Config: &container.Config{
 					Labels: map[string]string{
 						LabelName: "",
@@ -191,7 +192,7 @@ func TestInspectContainer(t *testing.T) {
 		},
 		{
 			name: "missing port label",
-			containerJSON: types.ContainerJSON{
+			containerJSON: container.InspectResponse{
 				Config: &container.Config{
 					Labels: map[string]string{
 						LabelName: "myservice",
@@ -202,7 +203,7 @@ func TestInspectContainer(t *testing.T) {
 		},
 		{
 			name: "invalid port value",
-			containerJSON: types.ContainerJSON{
+			containerJSON: container.InspectResponse{
 				Config: &container.Config{
 					Labels: map[string]string{
 						LabelName: "myservice",
@@ -214,14 +215,14 @@ func TestInspectContainer(t *testing.T) {
 		},
 		{
 			name: "no network",
-			containerJSON: types.ContainerJSON{
+			containerJSON: container.InspectResponse{
 				Config: &container.Config{
 					Labels: map[string]string{
 						LabelName: "myservice",
 						LabelPort: "8080",
 					},
 				},
-				NetworkSettings: &types.NetworkSettings{
+				NetworkSettings: &container.NetworkSettings{
 					Networks: map[string]*network.EndpointSettings{},
 				},
 			},
@@ -229,16 +230,16 @@ func TestInspectContainer(t *testing.T) {
 		},
 		{
 			name: "valid container",
-			containerJSON: types.ContainerJSON{
+			containerJSON: container.InspectResponse{
 				Config: &container.Config{
 					Labels: map[string]string{
 						LabelName: "myservice",
 						LabelPort: "8080",
 					},
 				},
-				NetworkSettings: &types.NetworkSettings{
+				NetworkSettings: &container.NetworkSettings{
 					Networks: map[string]*network.EndpointSettings{
-						"bridge": {IPAddress: "172.17.0.2"},
+						"bridge": {IPAddress: netip.MustParseAddr("172.17.0.2")},
 					},
 				},
 			},
@@ -310,19 +311,19 @@ func TestScanRunningContainers(t *testing.T) {
 
 	t.Run("emits start events for valid containers", func(t *testing.T) {
 		mock := &mockDockerClient{
-			containers: []types.Container{
+			containers: []container.Summary{
 				{ID: "container123456789"},
 			},
-			containerJSON: types.ContainerJSON{
+			containerJSON: container.InspectResponse{
 				Config: &container.Config{
 					Labels: map[string]string{
 						LabelName: "myservice",
 						LabelPort: "8080",
 					},
 				},
-				NetworkSettings: &types.NetworkSettings{
+				NetworkSettings: &container.NetworkSettings{
 					Networks: map[string]*network.EndpointSettings{
-						"bridge": {IPAddress: "172.17.0.2"},
+						"bridge": {IPAddress: netip.MustParseAddr("172.17.0.2")},
 					},
 				},
 			},
@@ -353,7 +354,7 @@ func TestScanRunningContainers(t *testing.T) {
 
 	t.Run("skips containers that fail inspection", func(t *testing.T) {
 		mock := &mockDockerClient{
-			containers: []types.Container{
+			containers: []container.Summary{
 				{ID: "container123456789"},
 			},
 			inspectErr: errors.New("inspect failed"),
@@ -377,16 +378,16 @@ func TestHandleEvent(t *testing.T) {
 
 	t.Run("start event with valid container", func(t *testing.T) {
 		mock := &mockDockerClient{
-			containerJSON: types.ContainerJSON{
+			containerJSON: container.InspectResponse{
 				Config: &container.Config{
 					Labels: map[string]string{
 						LabelName: "myservice",
 						LabelPort: "8080",
 					},
 				},
-				NetworkSettings: &types.NetworkSettings{
+				NetworkSettings: &container.NetworkSettings{
 					Networks: map[string]*network.EndpointSettings{
-						"bridge": {IPAddress: "172.17.0.2"},
+						"bridge": {IPAddress: netip.MustParseAddr("172.17.0.2")},
 					},
 				},
 			},

@@ -7,24 +7,24 @@ import (
 
 func TestLoad(t *testing.T) {
 	tests := []struct {
-		name        string
-		authKey     string
-		stateDir    string
-		wantErr     bool
+		name         string
+		authKey      string
+		stateDir     string
+		wantErr      bool
 		wantStateDir string
 	}{
 		{
-			name:        "valid config with custom state dir",
-			authKey:     "tskey-auth-xxx",
-			stateDir:    "/custom/state",
-			wantErr:     false,
+			name:         "valid config with custom state dir",
+			authKey:      "tskey-auth-xxx",
+			stateDir:     "/custom/state",
+			wantErr:      false,
 			wantStateDir: "/custom/state",
 		},
 		{
-			name:        "valid config with default state dir",
-			authKey:     "tskey-auth-xxx",
-			stateDir:    "",
-			wantErr:     false,
+			name:         "valid config with default state dir",
+			authKey:      "tskey-auth-xxx",
+			stateDir:     "",
+			wantErr:      false,
 			wantStateDir: DefaultStateDir,
 		},
 		{

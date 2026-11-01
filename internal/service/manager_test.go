@@ -413,7 +413,7 @@ func TestShutdown(t *testing.T) {
 	m.mu.Lock()
 	for id := range m.services {
 		m.services[id] = &mockService{
-			name: m.services[id].Name(),
+			name:    m.services[id].Name(),
 			stopErr: nil,
 		}
 	}
