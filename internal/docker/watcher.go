@@ -7,12 +7,9 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/events"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/client"
+	"github.com/moby/moby/api/types/events"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/client"
 )
 
 const (
@@ -22,9 +19,9 @@ const (
 
 // DockerClient abstracts the Docker client for testing
 type DockerClient interface {
-	ContainerList(ctx context.Context, options container.ListOptions) ([]types.Container, error)
-	ContainerInspect(ctx context.Context, containerID string) (types.ContainerJSON, error)
-	Events(ctx context.Context, options events.ListOptions) (<-chan events.Message, <-chan error)
+	ContainerList(ctx context.Context, options client.ContainerListOptions) (client.ContainerListResult, error)
+	ContainerInspect(ctx context.Context, containerID string, options client.ContainerInspectOptions) (client.ContainerInspectResult, error)
+	Events(ctx context.Context, options client.EventsListOptions) client.EventsResult
 	Close() error
 }
 
@@ -65,7 +62,7 @@ type Watcher struct {
 }
 
 func NewWatcher(logger *slog.Logger) (*Watcher, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := client.New(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
@@ -105,18 +102,17 @@ func (w *Watcher) Watch(ctx context.Context) <-chan ContainerEvent {
 }
 
 func (w *Watcher) scanRunningContainers(ctx context.Context, events chan<- ContainerEvent) {
-	containers, err := w.client.ContainerList(ctx, container.ListOptions{
-		Filters: filters.NewArgs(
-			filters.Arg("label", LabelName),
-			filters.Arg("status", "running"),
-		),
+	result, err := w.client.ContainerList(ctx, client.ContainerListOptions{
+		Filters: make(client.Filters).
+			Add("label", LabelName).
+			Add("status", "running"),
 	})
 	if err != nil {
 		w.logger.Error("failed to list containers", "error", err)
 		return
 	}
 
-	for _, c := range containers {
+	for _, c := range result.Items {
 		cfg, err := w.inspectContainer(ctx, c.ID)
 		if err != nil {
 			w.logger.Warn("failed to inspect container", "id", c.ID[:12], "error", err)
@@ -132,14 +128,12 @@ func (w *Watcher) scanRunningContainers(ctx context.Context, events chan<- Conta
 }
 
 func (w *Watcher) watchEvents(ctx context.Context, eventsChan chan<- ContainerEvent) {
-	filterArgs := filters.NewArgs(
-		filters.Arg("type", "container"),
-		filters.Arg("event", "start"),
-		filters.Arg("event", "stop"),
-		filters.Arg("event", "die"),
-	)
+	filterArgs := make(client.Filters).
+		Add("type", string(events.ContainerEventType)).
+		Add("event", string(events.ActionStart), string(events.ActionStop), string(events.ActionDie))
 
-	msgChan, errChan := w.client.Events(ctx, events.ListOptions{Filters: filterArgs})
+	result := w.client.Events(ctx, client.EventsListOptions{Filters: filterArgs})
+	msgChan, errChan := result.Messages, result.Err
 
 	for {
 		select {
@@ -158,7 +152,7 @@ func (w *Watcher) watchEvents(ctx context.Context, eventsChan chan<- ContainerEv
 
 func (w *Watcher) handleEvent(ctx context.Context, msg events.Message, eventsChan chan<- ContainerEvent) {
 	switch msg.Action {
-	case "start":
+	case events.ActionStart:
 		cfg, err := w.inspectContainer(ctx, msg.Actor.ID)
 		if err != nil {
 			// Container might not have dovetail labels, which is fine
@@ -170,7 +164,7 @@ func (w *Watcher) handleEvent(ctx context.Context, msg events.Message, eventsCha
 			Config:      cfg,
 		}
 
-	case "stop", "die":
+	case events.ActionStop, events.ActionDie:
 		// For stop/die events, we don't need the full config
 		// Just check if it had our label (from the event attributes)
 		if _, ok := msg.Actor.Attributes[LabelName]; ok {
@@ -183,9 +177,14 @@ func (w *Watcher) handleEvent(ctx context.Context, msg events.Message, eventsCha
 }
 
 func (w *Watcher) inspectContainer(ctx context.Context, id string) (*ServiceConfig, error) {
-	info, err := w.client.ContainerInspect(ctx, id)
+	result, err := w.client.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to inspect container: %w", err)
+	}
+	info := result.Container
+
+	if info.Config == nil {
+		return nil, fmt.Errorf("container has no config")
 	}
 
 	// Check for required labels
@@ -205,6 +204,9 @@ func (w *Watcher) inspectContainer(ctx context.Context, id string) (*ServiceConf
 	}
 
 	// Get container IP
+	if info.NetworkSettings == nil {
+		return nil, fmt.Errorf("container has no network settings")
+	}
 	ip, network, err := w.getContainerIP(info.NetworkSettings.Networks)
 	if err != nil {
 		return nil, err
@@ -232,8 +234,8 @@ func (w *Watcher) getContainerIP(networks map[string]*network.EndpointSettings) 
 	}
 
 	// Priority 1: Use bridge network
-	if net, ok := networks["bridge"]; ok && net.IPAddress != "" {
-		return net.IPAddress, "bridge", nil
+	if net, ok := networks["bridge"]; ok && net != nil && net.IPAddress.IsValid() {
+		return net.IPAddress.String(), "bridge", nil
 	}
 
 	// Priority 2: First available network (alphabetically for consistency)
@@ -244,8 +246,8 @@ func (w *Watcher) getContainerIP(networks map[string]*network.EndpointSettings) 
 	sort.Strings(names)
 
 	for _, name := range names {
-		if ip := networks[name].IPAddress; ip != "" {
-			return ip, name, nil
+		if ep := networks[name]; ep != nil && ep.IPAddress.IsValid() {
+			return ep.IPAddress.String(), name, nil
 		}
 	}
 

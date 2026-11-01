@@ -9,8 +9,8 @@
 #   - all
 registries:
   - type: standard
-    ref: v4.447.1 # renovate: depName=aquaproj/aqua-registry
+    ref: v4.580.0 # renovate: depName=aquaproj/aqua-registry
 packages:
-  - name: casey/just@1.45.0
-  - name: golang/go@go1.26.4
-  - name: caarlos0/svu@v3.3.0
+  - name: casey/just@1.59.0
+  - name: golang/go@go1.27.3
+  - name: caarlos0/svu@v3.4.1
